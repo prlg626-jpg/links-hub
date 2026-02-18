@@ -1,98 +1,108 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+let allLinks = [];
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+function safeText(value) {
+  return String(value || '').replace(/[<>&"]/g, (c) => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    '"': '&quot;'
+  }[c]));
 }
 
-body {
-  font-family: 'Inter', sans-serif;
-  background: radial-gradient(circle at top left, #0f172a, #020617);
-  color: #e2e8f0;
-  min-height: 100vh;
+function getDomain(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
 }
 
-.container {
-  max-width: 1100px;
-  margin: auto;
-  padding: 60px 20px;
+function formatDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
 }
 
-header {
-  text-align: center;
-  margin-bottom: 50px;
+async function loadLinks() {
+  try {
+    const response = await fetch('links.json', { cache: 'no-store' });
+    const data = await response.json();
+
+    allLinks = (data.links || []).map((x) => ({
+      title: x.title || 'Sin título',
+      url: x.url || '#',
+      note: x.note || '',
+      category: x.category || 'General',
+      date: x.date || ''
+    }));
+
+    allLinks.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
+    renderLinks(allLinks);
+  } catch (error) {
+    console.error('Error cargando links:', error);
+    const container = document.getElementById('linksContainer');
+    container.innerHTML = '<div class="empty">No se pudieron cargar los links.</div>';
+  }
 }
 
-h1 {
-  font-size: 2.8rem;
-  font-weight: 600;
-  background: linear-gradient(90deg, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 20px;
+function renderLinks(links) {
+  const container = document.getElementById('linksContainer');
+  container.innerHTML = '';
+
+  if (!links.length) {
+    container.innerHTML = '<div class="empty">No hay resultados.</div>';
+    return;
+  }
+
+  links.forEach((link) => {
+    const domain = getDomain(link.url);
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    card.innerHTML = `
+      <div class="topline">
+        <span class="badge">${safeText(link.category)}</span>
+        <span class="meta">${safeText(domain)}${link.date ? ' · ' + safeText(formatDate(link.date)) : ''}</span>
+      </div>
+
+      <h3>${safeText(link.title)}</h3>
+
+      ${link.note ? `<p>${safeText(link.note)}</p>` : `<p class="muted">Sin nota.</p>`}
+
+      <div class="actions">
+        <a class="btn" href="${safeText(link.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>
+        <button class="ghost" type="button" data-copy="${safeText(link.url)}">Copiar link</button>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll('button[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const url = btn.getAttribute('data-copy') || '';
+      try {
+        await navigator.clipboard.writeText(url);
+        btn.textContent = 'Copiado';
+        setTimeout(() => (btn.textContent = 'Copiar link'), 900);
+      } catch {
+        btn.textContent = 'No se pudo copiar';
+        setTimeout(() => (btn.textContent = 'Copiar link'), 1200);
+      }
+    });
+  });
 }
 
-#searchInput {
-  width: 100%;
-  max-width: 500px;
-  padding: 14px 18px;
-  border-radius: 12px;
-  border: 1px solid #1e293b;
-  background-color: #0f172a;
-  color: #e2e8f0;
-  outline: none;
-  font-size: 0.95rem;
-  transition: 0.3s ease;
-}
+document.getElementById('searchInput').addEventListener('input', function () {
+  const term = this.value.toLowerCase().trim();
 
-#searchInput:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
-}
+  const filtered = allLinks.filter((l) => {
+    const hay = `${l.title} ${l.note} ${l.category} ${getDomain(l.url)}`.toLowerCase();
+    return hay.includes(term);
+  });
 
-#linksContainer {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 25px;
-}
+  renderLinks(filtered);
+});
 
-.card {
-  background: linear-gradient(145deg, #0f172a, #0b1220);
-  border: 1px solid #1e293b;
-  padding: 22px;
-  border-radius: 16px;
-  transition: 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.card:hover {
-  transform: translateY(-5px);
-  border-color: #38bdf8;
-  box-shadow: 0 10px 30px rgba(56, 189, 248, 0.15);
-}
-
-.card h3 {
-  font-size: 1.05rem;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-
-.card p {
-  font-size: 0.85rem;
-  opacity: 0.7;
-  margin-bottom: 15px;
-  line-height: 1.4;
-}
-
-.card a {
-  text-decoration: none;
-  font-size: 0.85rem;
-  color: #38bdf8;
-  font-weight: 500;
-  transition: 0.2s;
-}
-
-.card a:hover {
-  color: #818cf8;
-}
+loadLinks();
