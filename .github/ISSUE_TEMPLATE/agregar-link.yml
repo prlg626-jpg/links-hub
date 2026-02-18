@@ -1,0 +1,36 @@
+name: Agregar nuevo link
+description: Formulario para añadir un nuevo enlace al hub
+title: "[Nuevo Link]: "
+labels: ["nuevo-link"]
+body:
+  - type: input
+    id: titulo
+    attributes:
+      label: Título del link
+      placeholder: Ej. Guía de jurisprudencia
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL
+      placeholder: https://...
+    validations:
+      required: true
+
+  - type: input
+    id: categoria
+    attributes:
+      label: Categoría
+      placeholder: Ej. Sistemas, Reuniones, Tablas
+    validations:
+      required: false
+
+  - type: textarea
+    id: nota
+    attributes:
+      label: Nota o descripción
+      placeholder: Descripción corta opcional
+    validations:
+      required: false
