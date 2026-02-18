@@ -1,0 +1,16 @@
+{
+  "links": [
+    {
+      "title": "GitHub",
+      "url": "https://github.com",
+      "note": "Repositorio y control de versiones",
+      "date": "2026-02-18"
+    },
+    {
+      "title": "Google Drive",
+      "url": "https://drive.google.com",
+      "note": "Acceso a archivos personales",
+      "date": "2026-02-18"
+    }
+  ]
+}
