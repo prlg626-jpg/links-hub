@@ -1,108 +1,170 @@
-let allLinks = [];
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
 
-function safeText(value) {
-  return String(value || '').replace(/[<>&"]/g, (c) => ({
-    '<': '&lt;',
-    '>': '&gt;',
-    '&': '&amp;',
-    '"': '&quot;'
-  }[c]));
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: radial-gradient(circle at top left, #0f172a, #020617);
+  color: #e2e8f0;
+  min-height: 100vh;
 }
 
-function getDomain(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
+.container {
+  max-width: 1100px;
+  margin: auto;
+  padding: 60px 20px;
 }
 
-function formatDate(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
+header {
+  text-align: center;
+  margin-bottom: 44px;
 }
 
-async function loadLinks() {
-  try {
-    const response = await fetch('links.json', { cache: 'no-store' });
-    const data = await response.json();
-
-    allLinks = (data.links || []).map((x) => ({
-      title: x.title || 'Sin título',
-      url: x.url || '#',
-      note: x.note || '',
-      category: x.category || 'General',
-      date: x.date || ''
-    }));
-
-    allLinks.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
-    renderLinks(allLinks);
-  } catch (error) {
-    console.error('Error cargando links:', error);
-    const container = document.getElementById('linksContainer');
-    container.innerHTML = '<div class="empty">No se pudieron cargar los links.</div>';
-  }
+h1 {
+  font-size: 2.8rem;
+  font-weight: 600;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 18px;
+  letter-spacing: 0.2px;
 }
 
-function renderLinks(links) {
-  const container = document.getElementById('linksContainer');
-  container.innerHTML = '';
-
-  if (!links.length) {
-    container.innerHTML = '<div class="empty">No hay resultados.</div>';
-    return;
-  }
-
-  links.forEach((link) => {
-    const domain = getDomain(link.url);
-    const card = document.createElement('div');
-    card.className = 'card';
-
-    card.innerHTML = `
-      <div class="topline">
-        <span class="badge">${safeText(link.category)}</span>
-        <span class="meta">${safeText(domain)}${link.date ? ' · ' + safeText(formatDate(link.date)) : ''}</span>
-      </div>
-
-      <h3>${safeText(link.title)}</h3>
-
-      ${link.note ? `<p>${safeText(link.note)}</p>` : `<p class="muted">Sin nota.</p>`}
-
-      <div class="actions">
-        <a class="btn" href="${safeText(link.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>
-        <button class="ghost" type="button" data-copy="${safeText(link.url)}">Copiar link</button>
-      </div>
-    `;
-
-    container.appendChild(card);
-  });
-
-  container.querySelectorAll('button[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const url = btn.getAttribute('data-copy') || '';
-      try {
-        await navigator.clipboard.writeText(url);
-        btn.textContent = 'Copiado';
-        setTimeout(() => (btn.textContent = 'Copiar link'), 900);
-      } catch {
-        btn.textContent = 'No se pudo copiar';
-        setTimeout(() => (btn.textContent = 'Copiar link'), 1200);
-      }
-    });
-  });
+#searchInput {
+  width: 100%;
+  max-width: 620px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+  background-color: rgba(15, 23, 42, 0.75);
+  color: #e2e8f0;
+  outline: none;
+  font-size: 0.98rem;
+  transition: 0.25s ease;
 }
 
-document.getElementById('searchInput').addEventListener('input', function () {
-  const term = this.value.toLowerCase().trim();
+#searchInput:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.25);
+}
 
-  const filtered = allLinks.filter((l) => {
-    const hay = `${l.title} ${l.note} ${l.category} ${getDomain(l.url)}`.toLowerCase();
-    return hay.includes(term);
-  });
+#linksContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 22px;
+}
 
-  renderLinks(filtered);
-});
+.card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.85));
+  border: 1px solid #1e293b;
+  padding: 22px;
+  border-radius: 18px;
+  transition: 0.25s ease;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
 
-loadLinks();
+.card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 18px 60px rgba(56, 189, 248, 0.12);
+}
+
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.08);
+  color: #7dd3fc;
+  font-size: 0.78rem;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card h3 {
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  line-height: 1.25;
+}
+
+.card p {
+  font-size: 0.9rem;
+  opacity: 0.78;
+  margin-bottom: 16px;
+  line-height: 1.45;
+  min-height: 2.6em;
+}
+
+.card p.muted {
+  opacity: 0.45;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.9), rgba(129, 140, 248, 0.9));
+  color: #020617;
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.ghost {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.35);
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.ghost:hover {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.empty {
+  grid-column: 1 / -1;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.35);
+  opacity: 0.8;
+  text-align: center;
+}
