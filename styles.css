@@ -283,3 +283,23 @@ h1 {
   gap: 10px;
   margin-top: 14px;
 }
+.notesWrap {
+  margin-top: 22px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.notesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.notesTitle {
+  font-weight: 700;
+  opacity: 0.9;
+}
