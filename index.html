@@ -5,7 +5,7 @@
   <title>Mi Hub Privado</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 
@@ -13,11 +13,20 @@
     <header>
       <div class="headerTop">
         <h1>Mi Hub de Links</h1>
-        <button id="openAdd" class="btnTop" type="button">Agregar link</button>
+        <button id="openAdd" class="btnTop" type="button">Agregar</button>
       </div>
 
       <input type="text" id="searchInput" placeholder="Buscar..." />
       <div id="statusBar" class="statusBar"></div>
+
+      <div class="notesWrap">
+        <div class="notesHeader">
+          <div class="notesTitle">Notas</div>
+          <button id="saveNotes" class="ghost" type="button">Guardar</button>
+        </div>
+        <textarea id="notesBox" class="fieldArea" placeholder="Escribe aquí. Se guardará automáticamente."></textarea>
+        <div id="notesStatus" class="statusBar"></div>
+      </div>
     </header>
 
     <main id="linksContainer"></main>
@@ -26,7 +35,7 @@
   <div id="modal" class="modal hidden">
     <div class="modalCard">
       <div class="modalHeader">
-        <div class="modalTitle">Agregar link</div>
+        <div class="modalTitle">Agregar</div>
         <button id="closeAdd" class="modalClose" type="button">×</button>
       </div>
 
@@ -34,8 +43,12 @@
         <label class="fieldLabel">Título</label>
         <input id="fTitle" class="fieldInput" placeholder="Ej. SIICOR" />
 
-        <label class="fieldLabel">URL</label>
+        <label class="fieldLabel">URL (si es Link)</label>
         <input id="fUrl" class="fieldInput" placeholder="https://..." />
+
+        <label class="fieldLabel">PDF (opcional)</label>
+        <input id="fPdf" class="fieldInput" type="file" accept="application/pdf" />
+        <div class="statusBar">Si seleccionas PDF, se ignora la URL.</div>
 
         <label class="fieldLabel">Categoría</label>
         <input id="fCat" class="fieldInput" placeholder="Ej. Sistemas" />
@@ -54,6 +67,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
