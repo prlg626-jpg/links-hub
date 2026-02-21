@@ -116,55 +116,81 @@ function setStatus(msg) {
 }
 
 function openModal() {
-  document.getElementById('modal').classList.remove('hidden');
+  const m = document.getElementById('modal');
+  if (m) m.classList.remove('hidden');
 }
 
 function closeModal() {
-  document.getElementById('modal').classList.add('hidden');
+  const m = document.getElementById('modal');
+  if (m) m.classList.add('hidden');
 }
 
-document.getElementById('openAdd').addEventListener('click', openModal);
-document.getElementById('closeAdd').addEventListener('click', closeModal);
-document.getElementById('cancelAdd').addEventListener('click', closeModal);
+document.addEventListener('DOMContentLoaded', () => {
+  const openBtn = document.getElementById('openAdd');
+  const closeBtn = document.getElementById('closeAdd');
+  const cancelBtn = document.getElementById('cancelAdd');
+  const sendBtn = document.getElementById('sendAdd');
 
-document.getElementById('sendAdd').addEventListener('click', async () => {
-  const title = document.getElementById('fTitle').value.trim();
-  const url = document.getElementById('fUrl').value.trim();
-  const category = document.getElementById('fCat').value.trim();
-  const note = document.getElementById('fNote').value.trim();
-  const password = document.getElementById('fPass').value;
-
-  if (!url || !url.startsWith('http')) {
-    setStatus('URL inválida.');
+  if (!openBtn || !closeBtn || !cancelBtn || !sendBtn) {
+    setStatus('Error: faltan elementos del formulario. Revisa index.html.');
     return;
   }
 
-  setStatus('Enviando link...');
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title, url, category, note, password })
-    });
+  openBtn.addEventListener('click', () => {
+    setStatus('');
+    openModal();
+  });
 
-    const text = await res.text();
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
 
-    if (!res.ok) {
-      setStatus('Error: ' + text);
+  sendBtn.addEventListener('click', async () => {
+    const title = (document.getElementById('fTitle')?.value || '').trim();
+    const url = (document.getElementById('fUrl')?.value || '').trim();
+    const category = (document.getElementById('fCat')?.value || '').trim();
+    const note = (document.getElementById('fNote')?.value || '').trim();
+    const password = (document.getElementById('fPass')?.value || '');
+
+    if (!url || !url.startsWith('http')) {
+      setStatus('URL inválida.');
       return;
     }
 
-    setStatus('Listo. En 30–60 segundos aparecerá en el hub.');
-    closeModal();
+    if (!password) {
+      setStatus('Falta la clave.');
+      return;
+    }
 
-    document.getElementById('fTitle').value = '';
-    document.getElementById('fUrl').value = '';
-    document.getElementById('fCat').value = '';
-    document.getElementById('fNote').value = '';
-    document.getElementById('fPass').value = '';
+    setStatus('Enviando link...');
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title, url, category, note, password })
+      });
 
-    setTimeout(() => loadLinks(), 65000);
-  } catch (e) {
-    setStatus('Error de red. Revisa el Worker.');
-  }
+      const text = await res.text();
+
+      if (!res.ok) {
+        setStatus('Error: ' + text);
+        return;
+      }
+
+      setStatus('Listo. En 30–60 segundos aparecerá en el hub.');
+      closeModal();
+
+      const ids = ['fTitle', 'fUrl', 'fCat', 'fNote', 'fPass'];
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+
+      setTimeout(() => {
+        try { loadLinks(); } catch {}
+      }, 65000);
+
+    } catch {
+      setStatus('Error de red. Revisa el Worker.');
+    }
+  });
 });
