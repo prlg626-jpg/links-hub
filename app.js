@@ -1,5 +1,15 @@
 const WORKER_URL = "https://links-hub-api.prlg626.workers.dev";
 
+const PASS_KEY = "hub_pass_v1";
+
+function getSavedPass() {
+  return sessionStorage.getItem(PASS_KEY) || "";
+}
+
+function setSavedPass(p) {
+  sessionStorage.setItem(PASS_KEY, p || "");
+}
+
 let allItems = [];
 
 function setStatus(msg) {
@@ -115,53 +125,61 @@ function closeModal() {
 }
 
 async function sendAdd() {
-  const title = (document.getElementById('fTitle')?.value || '').trim();
-  const url = (document.getElementById('fUrl')?.value || '').trim();
-  const category = (document.getElementById('fCat')?.value || '').trim();
-  const note = (document.getElementById('fNote')?.value || '').trim();
-  const password = (document.getElementById('fPass')?.value || '');
-  const pdf = document.getElementById('fPdf')?.files?.[0];
+  try {
+    const title = (document.getElementById('fTitle')?.value || '').trim();
+    const url = (document.getElementById('fUrl')?.value || '').trim();
+    const category = (document.getElementById('fCat')?.value || '').trim();
+    const note = (document.getElementById('fNote')?.value || '').trim();
+    const password = (document.getElementById('fPass')?.value || '');
+    const pdf = document.getElementById('fPdf')?.files?.[0];
 
-  if (!password) { setStatus('Falta la clave.'); return; }
+    if (!password) { setStatus('Falta la clave.'); return; }
 
-  setStatus('Enviando...');
+    setStatus('Enviando...');
 
-  if (pdf) {
-    const fd = new FormData();
-    fd.append('file', pdf);
-    fd.append('title', title || 'PDF');
-    fd.append('category', category || 'PDF');
-    fd.append('note', note);
-    fd.append('password', password);
+    if (pdf) {
+      const fd = new FormData();
+      fd.append('file', pdf);
+      fd.append('title', title || 'PDF');
+      fd.append('category', category || 'PDF');
+      fd.append('note', note);
+      fd.append('password', password);
 
-    const res = await fetch(WORKER_URL + "/upload-pdf", { method: 'POST', body: fd });
-    const text = await res.text();
-    if (!res.ok) { setStatus('Error: ' + text); return; }
+      const res = await fetch(WORKER_URL + "/upload-pdf", { method: 'POST', body: fd });
+      const text = await res.text();
 
-  } else {
-    if (!url || !url.startsWith('http')) { setStatus('URL inválida.'); return; }
+      if (!res.ok) {
+        setStatus('Error PDF: ' + text);
+        return;
+      }
+    } else {
+      if (!url || !url.startsWith('http')) { setStatus('URL inválida.'); return; }
 
-    const res = await fetch(WORKER_URL + "/add-link", {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: title || 'Sin título', url, category, note, password })
+      const res = await fetch(WORKER_URL + "/add-link", {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: title || 'Sin título', url, category, note, password })
+      });
+
+      const text = await res.text();
+      if (!res.ok) { setStatus('Error Link: ' + text); return; }
+    }
+
+    setStatus('Listo. En ~1 minuto aparecerá (cuando Actions termine).');
+    closeModal();
+
+    ['fTitle','fUrl','fCat','fNote','fPass'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
     });
+    const f = document.getElementById('fPdf');
+    if (f) f.value = '';
 
-    const text = await res.text();
-    if (!res.ok) { setStatus('Error: ' + text); return; }
+    setTimeout(() => loadItems(), 70000);
+  } catch (e) {
+    console.error(e);
+    setStatus('Error inesperado. Revisa consola.');
   }
-
-  setStatus('Listo. En ~1 minuto aparecerá (cuando Actions termine).');
-  closeModal();
-
-  ['fTitle','fUrl','fCat','fNote','fPass'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const f = document.getElementById('fPdf');
-  if (f) f.value = '';
-
-  setTimeout(() => loadItems(), 70000);
 }
 
 async function loadNotes() {
@@ -176,6 +194,7 @@ async function loadNotes() {
 }
 
 let notesTimer = null;
+
 async function saveNotes(force) {
   const box = document.getElementById('notesBox');
   const st = document.getElementById('notesStatus');
@@ -184,11 +203,14 @@ async function saveNotes(force) {
   if (force) {
     const pass = prompt('Clave para guardar notas');
     if (!pass) return;
-    window.__notesPass = pass;
+    setSavedPass(pass);
   }
 
-  const pass2 = window.__notesPass;
-  if (!pass2) return;
+  const pass2 = getSavedPass();
+  if (!pass2) {
+    if (st) st.textContent = 'Pulsa Guardar para ingresar clave.';
+    return;
+  }
 
   try {
     if (st) st.textContent = 'Guardando...';
@@ -197,7 +219,13 @@ async function saveNotes(force) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, password: pass2 })
     });
-    if (!res.ok) { if (st) st.textContent = 'Error guardando'; return; }
+
+    const t = await res.text();
+    if (!res.ok) {
+      if (st) st.textContent = 'Error guardando: ' + t;
+      return;
+    }
+
     if (st) st.textContent = 'Guardado';
   } catch {
     if (st) st.textContent = 'Error de red';
@@ -207,6 +235,11 @@ async function saveNotes(force) {
 document.addEventListener('DOMContentLoaded', () => {
   loadItems();
   loadNotes();
+
+  if (!getSavedPass()) {
+    const st = document.getElementById('notesStatus');
+    if (st) st.textContent = 'Pulsa Guardar para ingresar clave.';
+  }
 
   document.getElementById('openAdd')?.addEventListener('click', () => { setStatus(''); openModal(); });
   document.getElementById('closeAdd')?.addEventListener('click', closeModal);
