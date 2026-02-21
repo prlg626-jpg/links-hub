@@ -106,3 +106,65 @@ document.getElementById('searchInput').addEventListener('input', function () {
 });
 
 loadLinks();
+
+const WORKER_URL = "https://links-hub-api.prlg626.workers.dev";
+
+function setStatus(msg) {
+  const el = document.getElementById('statusBar');
+  if (!el) return;
+  el.textContent = msg || '';
+}
+
+function openModal() {
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+}
+
+document.getElementById('openAdd').addEventListener('click', openModal);
+document.getElementById('closeAdd').addEventListener('click', closeModal);
+document.getElementById('cancelAdd').addEventListener('click', closeModal);
+
+document.getElementById('sendAdd').addEventListener('click', async () => {
+  const title = document.getElementById('fTitle').value.trim();
+  const url = document.getElementById('fUrl').value.trim();
+  const category = document.getElementById('fCat').value.trim();
+  const note = document.getElementById('fNote').value.trim();
+  const password = document.getElementById('fPass').value;
+
+  if (!url || !url.startsWith('http')) {
+    setStatus('URL inválida.');
+    return;
+  }
+
+  setStatus('Enviando link...');
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, url, category, note, password })
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      setStatus('Error: ' + text);
+      return;
+    }
+
+    setStatus('Listo. En 30–60 segundos aparecerá en el hub.');
+    closeModal();
+
+    document.getElementById('fTitle').value = '';
+    document.getElementById('fUrl').value = '';
+    document.getElementById('fCat').value = '';
+    document.getElementById('fNote').value = '';
+    document.getElementById('fPass').value = '';
+
+    setTimeout(() => loadLinks(), 65000);
+  } catch (e) {
+    setStatus('Error de red. Revisa el Worker.');
+  }
+});
