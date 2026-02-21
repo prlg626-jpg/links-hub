@@ -5,24 +5,55 @@
   <title>Mi Hub Privado</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
   <div class="container">
-
     <header>
-      <h1>Mi Hub de Links</h1>
+      <div class="headerTop">
+        <h1>Mi Hub de Links</h1>
+        <button id="openAdd" class="btnTop" type="button">Agregar link</button>
+      </div>
+
       <input type="text" id="searchInput" placeholder="Buscar..." />
+      <div id="statusBar" class="statusBar"></div>
     </header>
 
-    <main id="linksContainer">
-      <!-- Los links se cargan automáticamente desde links.json -->
-    </main>
-
+    <main id="linksContainer"></main>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <div id="modal" class="modal hidden">
+    <div class="modalCard">
+      <div class="modalHeader">
+        <div class="modalTitle">Agregar link</div>
+        <button id="closeAdd" class="modalClose" type="button">×</button>
+      </div>
+
+      <div class="modalBody">
+        <label class="fieldLabel">Título</label>
+        <input id="fTitle" class="fieldInput" placeholder="Ej. SIICOR" />
+
+        <label class="fieldLabel">URL</label>
+        <input id="fUrl" class="fieldInput" placeholder="https://..." />
+
+        <label class="fieldLabel">Categoría</label>
+        <input id="fCat" class="fieldInput" placeholder="Ej. Sistemas" />
+
+        <label class="fieldLabel">Nota</label>
+        <textarea id="fNote" class="fieldArea" placeholder="Opcional"></textarea>
+
+        <label class="fieldLabel">Clave</label>
+        <input id="fPass" class="fieldInput" placeholder="Tu clave del hub" type="password" />
+
+        <div class="modalActions">
+          <button id="sendAdd" class="btn" type="button">Guardar</button>
+          <button id="cancelAdd" class="ghost" type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=4"></script>
 </body>
 </html>
