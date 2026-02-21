@@ -1,78 +1,69 @@
-let allLinks = [];
+const WORKER_URL = "https://links-hub-api.prlg626.workers.dev";
 
-function safeText(value) {
-  return String(value || '').replace(/[<>&"]/g, (c) => ({
-    '<': '&lt;',
-    '>': '&gt;',
-    '&': '&amp;',
-    '"': '&quot;'
-  }[c]));
+let allItems = [];
+
+function setStatus(msg) {
+  const el = document.getElementById('statusBar');
+  if (!el) return;
+  el.textContent = msg || '';
 }
 
-function getDomain(url) {
+function safeText(str) {
+  return String(str || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function loadItems() {
   try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
-}
-
-async function loadLinks() {
-  try {
-    const response = await fetch('links.json', { cache: 'no-store' });
+    const response = await fetch('items.json?ts=' + Date.now(), { cache: 'no-store' });
     const data = await response.json();
 
-    allLinks = (data.links || []).map((x) => ({
-      title: x.title || 'Sin título',
-      url: x.url || '#',
+    allItems = (data.items || []).map(x => ({
+      id: x.id,
+      type: x.type,
+      title: x.title,
+      url: x.url,
       note: x.note || '',
       category: x.category || 'General',
-      date: x.date || ''
+      date: x.date || '',
+      bucket_key: x.bucket_key || ''
     }));
 
-    allLinks.sort((a, b) => new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01'));
-    renderLinks(allLinks);
-  } catch (error) {
-    console.error('Error cargando links:', error);
+    renderItems(allItems);
+  } catch (e) {
     const container = document.getElementById('linksContainer');
-    container.innerHTML = '<div class="empty">No se pudieron cargar los links.</div>';
+    if (container) container.innerHTML = `<div class="empty">No se pudo cargar items.json</div>`;
   }
 }
 
-function renderLinks(links) {
+function renderItems(items) {
   const container = document.getElementById('linksContainer');
-  container.innerHTML = '';
+  if (!container) return;
 
-  if (!links.length) {
-    container.innerHTML = '<div class="empty">No hay resultados.</div>';
+  if (!items.length) {
+    container.innerHTML = `<div class="empty">Sin elementos</div>`;
     return;
   }
 
-  links.forEach((link) => {
-    const domain = getDomain(link.url);
+  container.innerHTML = '';
+
+  items.forEach((it) => {
     const card = document.createElement('div');
     card.className = 'card';
 
+    const openLabel = (it.type === 'pdf') ? 'Abrir PDF' : 'Abrir';
+    const typeBadge = (it.type === 'pdf') ? 'PDF' : (it.category || 'Link');
+
     card.innerHTML = `
       <div class="topline">
-        <span class="badge">${safeText(link.category)}</span>
-        <span class="meta">${safeText(domain)}${link.date ? ' · ' + safeText(formatDate(link.date)) : ''}</span>
+        <span class="badge">${safeText(typeBadge)}</span>
+        <span class="meta">${safeText(it.date || '')}</span>
       </div>
-
-      <h3>${safeText(link.title)}</h3>
-
-      ${link.note ? `<p>${safeText(link.note)}</p>` : `<p class="muted">Sin nota.</p>`}
-
+      <h3>${safeText(it.title || 'Sin título')}</h3>
+      <p class="${it.note ? '' : 'muted'}">${safeText(it.note || 'Sin descripción')}</p>
       <div class="actions">
-        <a class="btn" href="${safeText(link.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>
-        <button class="ghost" type="button" data-copy="${safeText(link.url)}">Copiar link</button>
+        <a class="btn" href="${safeText(it.url)}" target="_blank" rel="noopener noreferrer">${openLabel}</a>
+        <button class="ghost" type="button" data-copy="${safeText(it.url)}">Copiar</button>
+        <button class="ghost" type="button" data-del="${safeText(it.id)}">Eliminar</button>
       </div>
     `;
 
@@ -81,38 +72,36 @@ function renderLinks(links) {
 
   container.querySelectorAll('button[data-copy]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const url = btn.getAttribute('data-copy') || '';
+      const u = btn.getAttribute('data-copy') || '';
       try {
-        await navigator.clipboard.writeText(url);
-        btn.textContent = 'Copiado';
-        setTimeout(() => (btn.textContent = 'Copiar link'), 900);
+        await navigator.clipboard.writeText(u);
+        setStatus('Copiado.');
       } catch {
-        btn.textContent = 'No se pudo copiar';
-        setTimeout(() => (btn.textContent = 'Copiar link'), 1200);
+        setStatus('No se pudo copiar.');
       }
     });
   });
-}
 
-document.getElementById('searchInput').addEventListener('input', function () {
-  const term = this.value.toLowerCase().trim();
+  container.querySelectorAll('button[data-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-del') || '';
+      const pass = prompt('Clave para eliminar');
+      if (!pass) return;
 
-  const filtered = allLinks.filter((l) => {
-    const hay = `${l.title} ${l.note} ${l.category} ${getDomain(l.url)}`.toLowerCase();
-    return hay.includes(term);
+      setStatus('Eliminando...');
+      const res = await fetch(WORKER_URL + "/delete-item", {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, password: pass })
+      });
+
+      const t = await res.text();
+      if (!res.ok) { setStatus('Error: ' + t); return; }
+
+      setStatus('Listo. Actualizando...');
+      setTimeout(() => loadItems(), 4000);
+    });
   });
-
-  renderLinks(filtered);
-});
-
-loadLinks();
-
-const WORKER_URL = "https://links-hub-api.prlg626.workers.dev";
-
-function setStatus(msg) {
-  const el = document.getElementById('statusBar');
-  if (!el) return;
-  el.textContent = msg || '';
 }
 
 function openModal() {
@@ -125,72 +114,130 @@ function closeModal() {
   if (m) m.classList.add('hidden');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const openBtn = document.getElementById('openAdd');
-  const closeBtn = document.getElementById('closeAdd');
-  const cancelBtn = document.getElementById('cancelAdd');
-  const sendBtn = document.getElementById('sendAdd');
+async function sendAdd() {
+  const title = (document.getElementById('fTitle')?.value || '').trim();
+  const url = (document.getElementById('fUrl')?.value || '').trim();
+  const category = (document.getElementById('fCat')?.value || '').trim();
+  const note = (document.getElementById('fNote')?.value || '').trim();
+  const password = (document.getElementById('fPass')?.value || '');
+  const pdf = document.getElementById('fPdf')?.files?.[0];
 
-  if (!openBtn || !closeBtn || !cancelBtn || !sendBtn) {
-    setStatus('Error: faltan elementos del formulario. Revisa index.html.');
-    return;
+  if (!password) { setStatus('Falta la clave.'); return; }
+
+  setStatus('Enviando...');
+
+  if (pdf) {
+    const fd = new FormData();
+    fd.append('file', pdf);
+    fd.append('title', title || 'PDF');
+    fd.append('category', category || 'PDF');
+    fd.append('note', note);
+    fd.append('password', password);
+
+    const res = await fetch(WORKER_URL + "/upload-pdf", { method: 'POST', body: fd });
+    const text = await res.text();
+    if (!res.ok) { setStatus('Error: ' + text); return; }
+
+  } else {
+    if (!url || !url.startsWith('http')) { setStatus('URL inválida.'); return; }
+
+    const res = await fetch(WORKER_URL + "/add-link", {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: title || 'Sin título', url, category, note, password })
+    });
+
+    const text = await res.text();
+    if (!res.ok) { setStatus('Error: ' + text); return; }
   }
 
-  openBtn.addEventListener('click', () => {
-    setStatus('');
-    openModal();
+  setStatus('Listo. En ~1 minuto aparecerá (cuando Actions termine).');
+  closeModal();
+
+  ['fTitle','fUrl','fCat','fNote','fPass'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
   });
+  const f = document.getElementById('fPdf');
+  if (f) f.value = '';
 
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
+  setTimeout(() => loadItems(), 70000);
+}
 
-  sendBtn.addEventListener('click', async () => {
-    const title = (document.getElementById('fTitle')?.value || '').trim();
-    const url = (document.getElementById('fUrl')?.value || '').trim();
-    const category = (document.getElementById('fCat')?.value || '').trim();
-    const note = (document.getElementById('fNote')?.value || '').trim();
-    const password = (document.getElementById('fPass')?.value || '');
+async function loadNotes() {
+  try {
+    const res = await fetch(WORKER_URL + "/notes", { method: "GET" });
+    const j = await res.json();
+    const box = document.getElementById('notesBox');
+    if (box) box.value = j.text || '';
+    const st = document.getElementById('notesStatus');
+    if (st) st.textContent = '';
+  } catch {}
+}
 
-    if (!url || !url.startsWith('http')) {
-      setStatus('URL inválida.');
-      return;
-    }
+let notesTimer = null;
+async function saveNotes(force) {
+  const box = document.getElementById('notesBox');
+  const st = document.getElementById('notesStatus');
+  const text = box ? box.value : '';
 
-    if (!password) {
-      setStatus('Falta la clave.');
-      return;
-    }
+  if (force) {
+    const pass = prompt('Clave para guardar notas');
+    if (!pass) return;
+    window.__notesPass = pass;
+  }
 
-    setStatus('Enviando link...');
-    try {
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title, url, category, note, password })
-      });
+  const pass2 = window.__notesPass;
+  if (!pass2) return;
 
-      const text = await res.text();
+  try {
+    if (st) st.textContent = 'Guardando...';
+    const res = await fetch(WORKER_URL + "/notes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, password: pass2 })
+    });
+    if (!res.ok) { if (st) st.textContent = 'Error guardando'; return; }
+    if (st) st.textContent = 'Guardado';
+  } catch {
+    if (st) st.textContent = 'Error de red';
+  }
+}
 
-      if (!res.ok) {
-        setStatus('Error: ' + text);
-        return;
-      }
+document.addEventListener('DOMContentLoaded', () => {
+  loadItems();
+  loadNotes();
 
-      setStatus('Listo. En 30–60 segundos aparecerá en el hub.');
-      closeModal();
+  document.getElementById('openAdd')?.addEventListener('click', () => { setStatus(''); openModal(); });
+  document.getElementById('closeAdd')?.addEventListener('click', closeModal);
+  document.getElementById('cancelAdd')?.addEventListener('click', closeModal);
+  document.getElementById('sendAdd')?.addEventListener('click', sendAdd);
 
-      const ids = ['fTitle', 'fUrl', 'fCat', 'fNote', 'fPass'];
-      ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-      });
+  const search = document.getElementById('searchInput');
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase().trim();
+      const filtered = allItems.filter(x =>
+        (x.title || '').toLowerCase().includes(q) ||
+        (x.note || '').toLowerCase().includes(q) ||
+        (x.category || '').toLowerCase().includes(q) ||
+        (x.type || '').toLowerCase().includes(q)
+      );
+      renderItems(filtered);
+    });
+  }
 
-      setTimeout(() => {
-        try { loadLinks(); } catch {}
-      }, 65000);
+  const box = document.getElementById('notesBox');
+  const btn = document.getElementById('saveNotes');
 
-    } catch {
-      setStatus('Error de red. Revisa el Worker.');
-    }
-  });
+  if (btn) btn.addEventListener('click', () => saveNotes(true));
+
+  if (box) {
+    box.addEventListener('input', () => {
+      const st = document.getElementById('notesStatus');
+      if (st) st.textContent = 'Escribiendo...';
+      clearTimeout(notesTimer);
+      notesTimer = setTimeout(() => saveNotes(false), 1200);
+    });
+  }
 });
