@@ -1,0 +1,101 @@
+name: Hub items processor
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'hub-add') || contains(github.event.issue.labels.*.name, 'hub-delete')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update items.json
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const body = event.issue?.body || '';
+
+          function pick(key) {
+            const re = new RegExp(`###\\s+${key}\\s*\\n([\\s\\S]*?)(\\n\\n###|\\n\\n$)`, 'i');
+            const m = body.match(re);
+            return m ? m[1].trim() : '';
+          }
+
+          const action = pick('action');
+
+          const file = 'items.json';
+          const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '{"items": []}';
+          const data = JSON.parse(raw);
+          if (!Array.isArray(data.items)) data.items = [];
+
+          const now = new Date();
+          const yyyy = now.getUTCFullYear();
+          const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(now.getUTCDate()).padStart(2, '0');
+          const date = `${yyyy}-${mm}-${dd}`;
+
+          if (action === 'add-link') {
+            const title = pick('title') || 'Sin título';
+            const url = pick('url') || '';
+            const category = pick('category') || 'General';
+            const note = pick('note') || '';
+
+            if (url) {
+              const id = `link-${yyyy}${mm}${dd}-${Math.random().toString(16).slice(2,8)}`;
+              data.items.unshift({ id, type: 'link', title, url, category, note, date });
+            }
+          }
+
+          if (action === 'add-pdf') {
+            const title = pick('title') || 'PDF';
+            const url = pick('url') || '';
+            const category = pick('category') || 'PDF';
+            const note = pick('note') || '';
+            const bucket_key = pick('bucket_key') || '';
+
+            if (url) {
+              const id = `pdf-${yyyy}${mm}${dd}-${Math.random().toString(16).slice(2,8)}`;
+              data.items.unshift({ id, type: 'pdf', title, url, category, note, date, bucket_key });
+            }
+          }
+
+          if (action === 'delete-item') {
+            const id = pick('id');
+            data.items = data.items.filter(x => x.id !== id);
+          }
+
+          fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          NODE
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "hub-bot"
+          git config user.email "hub-bot@users.noreply.github.com"
+          git add items.json
+          git commit -m "Update hub items from issue #${{ github.event.issue.number }}"
+          git push
+
+      - name: Close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: "closed"
+            });
