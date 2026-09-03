@@ -30,6 +30,11 @@ jobs:
             return m ? m[1].trim() : '';
           }
 
+          function firstUrl(value) {
+            const m = String(value || '').match(/https?:\\/\\/[^\\s)]+/i);
+            return m ? m[0].replace(/[>,.;]+$/, '') : '';
+          }
+
           const action = pick('action');
           if (!action) throw new Error('Missing action');
 
@@ -46,7 +51,7 @@ jobs:
 
           if (action === 'add-link') {
             const title = pick('title') || 'Sin título';
-            const url = pick('url') || '';
+            const url = firstUrl(pick('url'));
             const category = pick('category') || 'General';
             const note = pick('note') || '';
 
@@ -55,12 +60,12 @@ jobs:
             data.items.unshift({ id, type: 'link', title, url, category, note, date });
           } else if (action === 'add-pdf') {
             const title = pick('title') || 'PDF';
-            const url = pick('url') || '';
+            const url = firstUrl(pick('url'));
             const category = pick('category') || 'PDF';
             const note = pick('note') || '';
             const bucket_key = pick('bucket_key') || '';
 
-            if (!url) throw new Error('Missing URL for add-pdf');
+            if (!url) throw new Error('Missing PDF attachment URL for add-pdf');
             const id = `pdf-${yyyy}${mm}${dd}-${Math.random().toString(16).slice(2,8)}`;
             data.items.unshift({ id, type: 'pdf', title, url, category, note, date, bucket_key });
           } else if (action === 'delete-item') {
@@ -77,7 +82,7 @@ jobs:
 
             const current = data.items[index];
             const title = pick('title') || current.title || 'Sin título';
-            const url = pick('url') || current.url || '';
+            const url = firstUrl(pick('url')) || current.url || '';
             const category = pick('category') || current.category || 'General';
             const note = pick('note');
 
