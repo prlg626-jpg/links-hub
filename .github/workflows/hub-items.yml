@@ -25,7 +25,7 @@ jobs:
           const body = event.issue?.body || '';
 
           function pick(key) {
-            const re = new RegExp(`###\\s+${key}\\s*\\n([\\s\\S]*?)(\\n\\n###|\\n\\n$)`, 'i');
+            const re = new RegExp(`###\\s+${key}\\s*\\n([\\s\\S]*?)(?=\\n\\n###|\\s*$)`, 'i');
             const m = body.match(re);
             return m ? m[1].trim() : '';
           }
@@ -70,6 +70,7 @@ jobs:
 
           if (action === 'delete-item') {
             const id = pick('id');
+            if (!id) throw new Error('Missing id for delete-item');
             data.items = data.items.filter(x => x.id !== id);
           }
 
