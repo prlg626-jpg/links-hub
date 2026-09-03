@@ -1,16 +1,24 @@
 const WORKER_URL = "https://links-hub-api.prlg626.workers.dev";
-
+const REPO_FULL_NAME = "prlg626-jpg/links-hub";
 const PASS_KEY = "hub_pass_v1";
 
+let allItems = [];
+let editingId = '';
+let notesTimer = null;
+
 function getSavedPass() {
-  return sessionStorage.getItem(PASS_KEY) || "";
+  try {
+    return sessionStorage.getItem(PASS_KEY) || "";
+  } catch {
+    return "";
+  }
 }
 
 function setSavedPass(p) {
-  sessionStorage.setItem(PASS_KEY, p || "");
+  try {
+    sessionStorage.setItem(PASS_KEY, p || "");
+  } catch {}
 }
-
-let allItems = [];
 
 function setStatus(msg) {
   const el = document.getElementById('statusBar');
@@ -18,13 +26,72 @@ function setStatus(msg) {
   el.textContent = msg || '';
 }
 
-function safeText(str) {
-  return String(str || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function getItem(id) {
+  return allItems.find(x => x.id === id);
+}
+
+async function workerRequest(path, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(WORKER_URL + path, {
+      ...options,
+      signal: controller.signal
+    });
+    const text = await res.text();
+    return { res, text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function issueBody(fields) {
+  return Object.entries(fields)
+    .map(([key, value]) => `### ${key}\n${String(value ?? '')}`)
+    .join('\n\n');
+}
+
+function openOwnerIssue(title, fields) {
+  const url = new URL(`https://github.com/${REPO_FULL_NAME}/issues/new`);
+  url.searchParams.set('title', title);
+  url.searchParams.set('body', issueBody(fields));
+  window.location.assign(url.toString());
+}
+
+function shouldOfferFallback(status) {
+  return status === 404 || status === 405 || status === 408 || status === 429 || status >= 500;
+}
+
+function offerGitHubFallback(actionLabel, title, fields) {
+  const ok = confirm(
+    `El servicio automático de Cloudflare no respondió correctamente. ` +
+    `¿Quieres completar ${actionLabel} desde GitHub? La solicitud quedará prellenada; solo tendrás que enviarla.`
+  );
+  if (!ok) return false;
+  openOwnerIssue(title, fields);
+  return true;
+}
+
+function scheduleRefresh() {
+  setTimeout(() => loadItems(), 4500);
+  setTimeout(() => loadItems(), 15000);
 }
 
 async function loadItems() {
   try {
     const response = await fetch('items.json?ts=' + Date.now(), { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
 
     allItems = (data.items || []).map(x => ({
@@ -40,6 +107,7 @@ async function loadItems() {
 
     renderItems(allItems);
   } catch (e) {
+    console.error('loadItems', e);
     const container = document.getElementById('linksContainer');
     if (container) container.innerHTML = `<div class="empty">No se pudo cargar items.json</div>`;
   }
@@ -65,79 +133,235 @@ function renderItems(items) {
 
     card.innerHTML = `
       <div class="topline">
-        <span class="badge">${safeText(typeBadge)}</span>
-        <span class="meta">${safeText(it.date || '')}</span>
+        <span class="badge">${escapeHtml(typeBadge)}</span>
+        <span class="meta">${escapeHtml(it.date || '')}</span>
       </div>
-      <h3>${safeText(it.title || 'Sin título')}</h3>
-      <p class="${it.note ? '' : 'muted'}">${safeText(it.note || 'Sin descripción')}</p>
+      <h3>${escapeHtml(it.title || 'Sin título')}</h3>
+      <p class="${it.note ? '' : 'muted'}">${escapeHtml(it.note || 'Sin descripción')}</p>
       <div class="actions">
-        <a class="btn" href="${safeText(it.url)}" target="_blank" rel="noopener noreferrer">${openLabel}</a>
-        <button class="ghost" type="button" data-copy="${safeText(it.url)}">Copiar</button>
-        <button class="ghost" type="button" data-del="${safeText(it.id)}">Eliminar</button>
+        <a class="btn" data-open target="_blank" rel="noopener noreferrer">${openLabel}</a>
+        <button class="ghost" type="button" data-copy>Copiar</button>
+        <button class="ghost" type="button" data-edit>Editar</button>
+        <button class="ghost" type="button" data-del>Eliminar</button>
       </div>
     `;
 
-    container.appendChild(card);
-  });
+    const open = card.querySelector('[data-open]');
+    if (open) open.href = it.url || '#';
 
-  container.querySelectorAll('button[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const u = btn.getAttribute('data-copy') || '';
+    card.querySelector('[data-copy]')?.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(u);
+        await navigator.clipboard.writeText(it.url || '');
         setStatus('Copiado.');
       } catch {
         setStatus('No se pudo copiar.');
       }
     });
+
+    card.querySelector('[data-edit]')?.addEventListener('click', () => openEditModal(it.id));
+    card.querySelector('[data-del]')?.addEventListener('click', () => deleteItem(it.id));
+
+    container.appendChild(card);
   });
+}
 
-  container.querySelectorAll('button[data-del]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-del') || '';
-      const pass = prompt('Clave para eliminar');
-      if (!pass) return;
-
-      setStatus('Eliminando...');
-      const res = await fetch(WORKER_URL + "/delete-item", {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id, password: pass })
-      });
-
-      const t = await res.text();
-      if (!res.ok) { setStatus('Error: ' + t); return; }
-
-      setStatus('Listo. Actualizando...');
-      setTimeout(() => loadItems(), 4000);
-    });
+function resetForm() {
+  ['fTitle','fUrl','fCat','fNote','fPass'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
   });
+  const file = document.getElementById('fPdf');
+  if (file) file.value = '';
 }
 
 function openModal() {
-  const m = document.getElementById('modal');
-  if (m) m.classList.remove('hidden');
+  document.getElementById('modal')?.classList.remove('hidden');
 }
 
 function closeModal() {
-  const m = document.getElementById('modal');
-  if (m) m.classList.add('hidden');
+  document.getElementById('modal')?.classList.add('hidden');
+  editingId = '';
 }
 
-async function sendAdd() {
+function openAddModal() {
+  editingId = '';
+  resetForm();
+  const title = document.getElementById('modalTitle');
+  const send = document.getElementById('sendAdd');
+  const pdfWrap = document.getElementById('pdfFieldWrap');
+  if (title) title.textContent = 'Agregar';
+  if (send) send.textContent = 'Guardar';
+  if (pdfWrap) pdfWrap.classList.remove('hidden');
+  setStatus('');
+  openModal();
+}
+
+function openEditModal(id) {
+  const item = getItem(id);
+  if (!item) {
+    setStatus('No encontré el elemento para editar.');
+    return;
+  }
+
+  editingId = id;
+  const title = document.getElementById('modalTitle');
+  const send = document.getElementById('sendAdd');
+  const pdfWrap = document.getElementById('pdfFieldWrap');
+  if (title) title.textContent = 'Editar';
+  if (send) send.textContent = 'Guardar cambios';
+  if (pdfWrap) pdfWrap.classList.add('hidden');
+
+  const fTitle = document.getElementById('fTitle');
+  const fUrl = document.getElementById('fUrl');
+  const fCat = document.getElementById('fCat');
+  const fNote = document.getElementById('fNote');
+  const fPass = document.getElementById('fPass');
+
+  if (fTitle) fTitle.value = item.title || '';
+  if (fUrl) fUrl.value = item.url || '';
+  if (fCat) fCat.value = item.category || '';
+  if (fNote) fNote.value = item.note || '';
+  if (fPass) fPass.value = '';
+
+  setStatus('');
+  openModal();
+}
+
+async function deleteItem(id) {
+  const item = getItem(id);
+  if (!item) return;
+  if (!confirm(`¿Eliminar “${item.title || 'este elemento'}”?`)) return;
+
+  const password = prompt('Clave para eliminar');
+  if (!password) return;
+
+  setStatus('Eliminando...');
+
   try {
-    const title = (document.getElementById('fTitle')?.value || '').trim();
-    const url = (document.getElementById('fUrl')?.value || '').trim();
-    const category = (document.getElementById('fCat')?.value || '').trim();
-    const note = (document.getElementById('fNote')?.value || '').trim();
-    const password = (document.getElementById('fPass')?.value || '');
-    const pdf = document.getElementById('fPdf')?.files?.[0];
+    const { res, text } = await workerRequest('/delete-item', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, password })
+    });
 
-    if (!password) { setStatus('Falta la clave.'); return; }
+    if (res.ok) {
+      setStatus('Solicitud de eliminación enviada. Actualizando...');
+      scheduleRefresh();
+      return;
+    }
 
-    setStatus('Enviando...');
+    if (res.status === 401 || res.status === 403) {
+      setStatus('Clave incorrecta o acceso rechazado.');
+      return;
+    }
 
-    if (pdf) {
+    if (shouldOfferFallback(res.status)) {
+      if (offerGitHubFallback('la eliminación', `[Hub Delete] ${id}`, {
+        action: 'delete-item',
+        id
+      })) return;
+    }
+
+    setStatus(`No se pudo eliminar (${res.status}): ${text || 'sin detalle'}`);
+  } catch (e) {
+    console.error('deleteItem', e);
+    if (offerGitHubFallback('la eliminación', `[Hub Delete] ${id}`, {
+      action: 'delete-item',
+      id
+    })) return;
+    setStatus('No se pudo conectar con el servicio de eliminación.');
+  }
+}
+
+async function sendForm() {
+  const title = (document.getElementById('fTitle')?.value || '').trim();
+  const url = (document.getElementById('fUrl')?.value || '').trim();
+  const category = (document.getElementById('fCat')?.value || '').trim();
+  const note = (document.getElementById('fNote')?.value || '').trim();
+  const password = document.getElementById('fPass')?.value || '';
+  const pdf = document.getElementById('fPdf')?.files?.[0];
+
+  if (!password) {
+    setStatus('Falta la clave.');
+    return;
+  }
+
+  if (editingId) {
+    await sendEdit({ id: editingId, title, url, category, note, password });
+    return;
+  }
+
+  await sendAdd({ title, url, category, note, password, pdf });
+}
+
+async function sendEdit({ id, title, url, category, note, password }) {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    setStatus('URL inválida.');
+    return;
+  }
+
+  setStatus('Guardando cambios...');
+
+  const payload = {
+    id,
+    title: title || 'Sin título',
+    url,
+    category: category || 'General',
+    note,
+    password
+  };
+
+  try {
+    const { res, text } = await workerRequest('/edit-item', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      setStatus('Cambios enviados. Actualizando...');
+      closeModal();
+      scheduleRefresh();
+      return;
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      setStatus('Clave incorrecta o acceso rechazado.');
+      return;
+    }
+
+    if (shouldOfferFallback(res.status)) {
+      offerGitHubFallback('la edición', `[Hub Edit] ${payload.title}`, {
+        action: 'edit-item',
+        id,
+        title: payload.title,
+        url: payload.url,
+        category: payload.category,
+        note: payload.note
+      });
+      return;
+    }
+
+    setStatus(`No se pudo editar (${res.status}): ${text || 'sin detalle'}`);
+  } catch (e) {
+    console.error('sendEdit', e);
+    if (offerGitHubFallback('la edición', `[Hub Edit] ${payload.title}`, {
+      action: 'edit-item',
+      id,
+      title: payload.title,
+      url: payload.url,
+      category: payload.category,
+      note: payload.note
+    })) return;
+    setStatus('No se pudo conectar con el servicio de edición.');
+  }
+}
+
+async function sendAdd({ title, url, category, note, password, pdf }) {
+  setStatus('Enviando...');
+
+  if (pdf) {
+    try {
       const fd = new FormData();
       fd.append('file', pdf);
       fd.append('title', title || 'PDF');
@@ -145,55 +369,107 @@ async function sendAdd() {
       fd.append('note', note);
       fd.append('password', password);
 
-      const res = await fetch(WORKER_URL + "/upload-pdf", { method: 'POST', body: fd });
-      const text = await res.text();
+      const { res, text } = await workerRequest('/upload-pdf', {
+        method: 'POST',
+        body: fd
+      }, 30000);
 
       if (!res.ok) {
-        setStatus('Error PDF: ' + text);
+        if (res.status === 401 || res.status === 403) {
+          setStatus('Clave incorrecta o acceso rechazado.');
+        } else {
+          setStatus(`No se pudo subir el PDF (${res.status}): ${text || 'sin detalle'}`);
+        }
         return;
       }
-    } else {
-      if (!url || !url.startsWith('http')) { setStatus('URL inválida.'); return; }
 
-      const res = await fetch(WORKER_URL + "/add-link", {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title: title || 'Sin título', url, category, note, password })
-      });
+      setStatus('PDF enviado. Actualizando...');
+      closeModal();
+      resetForm();
+      scheduleRefresh();
+      return;
+    } catch (e) {
+      console.error('uploadPdf', e);
+      setStatus('No se pudo conectar con Cloudflare para subir el PDF. Esta operación sí depende del Worker.');
+      return;
+    }
+  }
 
-      const text = await res.text();
-      if (!res.ok) { setStatus('Error Link: ' + text); return; }
+  if (!url || !/^https?:\/\//i.test(url)) {
+    setStatus('URL inválida.');
+    return;
+  }
+
+  const payload = {
+    title: title || 'Sin título',
+    url,
+    category: category || 'General',
+    note,
+    password
+  };
+
+  try {
+    const { res, text } = await workerRequest('/add-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      setStatus('Link enviado. Actualizando...');
+      closeModal();
+      resetForm();
+      scheduleRefresh();
+      return;
     }
 
-    setStatus('Listo. En ~1 minuto aparecerá (cuando Actions termine).');
-    closeModal();
+    if (res.status === 401 || res.status === 403) {
+      setStatus('Clave incorrecta o acceso rechazado.');
+      return;
+    }
 
-    ['fTitle','fUrl','fCat','fNote','fPass'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    const f = document.getElementById('fPdf');
-    if (f) f.value = '';
+    if (shouldOfferFallback(res.status)) {
+      offerGitHubFallback('la creación del link', `[Hub Add] ${payload.title}`, {
+        action: 'add-link',
+        title: payload.title,
+        url: payload.url,
+        category: payload.category,
+        note: payload.note
+      });
+      return;
+    }
 
-    setTimeout(() => loadItems(), 70000);
+    setStatus(`No se pudo agregar (${res.status}): ${text || 'sin detalle'}`);
   } catch (e) {
-    console.error(e);
-    setStatus('Error inesperado. Revisa consola.');
+    console.error('sendAdd', e);
+    if (offerGitHubFallback('la creación del link', `[Hub Add] ${payload.title}`, {
+      action: 'add-link',
+      title: payload.title,
+      url: payload.url,
+      category: payload.category,
+      note: payload.note
+    })) return;
+    setStatus('No se pudo conectar con el servicio para agregar el link.');
   }
 }
 
 async function loadNotes() {
+  const st = document.getElementById('notesStatus');
   try {
-    const res = await fetch(WORKER_URL + "/notes", { method: "GET" });
-    const j = await res.json();
+    const { res, text } = await workerRequest('/notes', { method: 'GET' }, 8000);
+    if (!res.ok) {
+      if (st) st.textContent = `Notas no disponibles (${res.status}).`;
+      return;
+    }
+    const j = JSON.parse(text || '{}');
     const box = document.getElementById('notesBox');
     if (box) box.value = j.text || '';
-    const st = document.getElementById('notesStatus');
-    if (st) st.textContent = '';
-  } catch {}
+    if (st) st.textContent = getSavedPass() ? '' : 'Pulsa Guardar para ingresar clave.';
+  } catch (e) {
+    console.error('loadNotes', e);
+    if (st) st.textContent = 'Notas no disponibles: no hay conexión con Cloudflare.';
+  }
 }
-
-let notesTimer = null;
 
 async function saveNotes(force) {
   const box = document.getElementById('notesBox');
@@ -206,29 +482,30 @@ async function saveNotes(force) {
     setSavedPass(pass);
   }
 
-  const pass2 = getSavedPass();
-  if (!pass2) {
+  const password = getSavedPass();
+  if (!password) {
     if (st) st.textContent = 'Pulsa Guardar para ingresar clave.';
     return;
   }
 
   try {
     if (st) st.textContent = 'Guardando...';
-    const res = await fetch(WORKER_URL + "/notes", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, password: pass2 })
+    const { res, text: responseText } = await workerRequest('/notes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, password })
     });
 
-    const t = await res.text();
     if (!res.ok) {
-      if (st) st.textContent = 'Error guardando: ' + t;
+      if (res.status === 401 || res.status === 403) setSavedPass('');
+      if (st) st.textContent = `Error guardando (${res.status}): ${responseText || 'sin detalle'}`;
       return;
     }
 
     if (st) st.textContent = 'Guardado';
-  } catch {
-    if (st) st.textContent = 'Error de red';
+  } catch (e) {
+    console.error('saveNotes', e);
+    if (st) st.textContent = 'Error de red con Cloudflare.';
   }
 }
 
@@ -236,15 +513,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadItems();
   loadNotes();
 
-  if (!getSavedPass()) {
-    const st = document.getElementById('notesStatus');
-    if (st) st.textContent = 'Pulsa Guardar para ingresar clave.';
-  }
-
-  document.getElementById('openAdd')?.addEventListener('click', () => { setStatus(''); openModal(); });
+  document.getElementById('openAdd')?.addEventListener('click', openAddModal);
   document.getElementById('closeAdd')?.addEventListener('click', closeModal);
   document.getElementById('cancelAdd')?.addEventListener('click', closeModal);
-  document.getElementById('sendAdd')?.addEventListener('click', sendAdd);
+  document.getElementById('sendAdd')?.addEventListener('click', sendForm);
 
   const search = document.getElementById('searchInput');
   if (search) {
