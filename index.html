@@ -5,7 +5,7 @@
   <title>Mi Hub Privado</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -50,6 +50,8 @@
           <label class="fieldLabel">PDF (opcional)</label>
           <input id="fPdf" class="fieldInput" type="file" accept="application/pdf" />
           <div class="statusBar">Si seleccionas PDF, se ignora la URL.</div>
+          <button id="pdfGitHubFallback" class="ghost" type="button" style="margin-top:8px;">Subir PDF por GitHub (respaldo)</button>
+          <div class="statusBar">Úsalo si el cargador normal de PDF no responde.</div>
         </div>
 
         <label class="fieldLabel">Categoría</label>
@@ -70,5 +72,20 @@
   </div>
 
   <script src="app.js?v=9"></script>
+  <script>
+    document.getElementById('pdfGitHubFallback')?.addEventListener('click', () => {
+      const title = (document.getElementById('fTitle')?.value || '').trim() || 'PDF';
+      const category = (document.getElementById('fCat')?.value || '').trim() || 'PDF';
+      const note = (document.getElementById('fNote')?.value || '').trim();
+
+      openOwnerIssue(`[Hub PDF] ${title}`, {
+        action: 'add-pdf',
+        title,
+        category,
+        note,
+        url: 'BORRA ESTA LINEA Y ARRASTRA AQUI EL PDF. Cuando termine de adjuntarse, publica el issue.'
+      });
+    });
+  </script>
 </body>
 </html>
