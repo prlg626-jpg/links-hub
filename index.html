@@ -5,7 +5,7 @@
   <title>Mi Hub Privado</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -35,7 +35,7 @@
   <div id="modal" class="modal hidden">
     <div class="modalCard">
       <div class="modalHeader">
-        <div class="modalTitle">Agregar</div>
+        <div id="modalTitle" class="modalTitle">Agregar</div>
         <button id="closeAdd" class="modalClose" type="button">×</button>
       </div>
 
@@ -43,12 +43,14 @@
         <label class="fieldLabel">Título</label>
         <input id="fTitle" class="fieldInput" placeholder="Ej. SIICOR" />
 
-        <label class="fieldLabel">URL (si es Link)</label>
+        <label class="fieldLabel">URL</label>
         <input id="fUrl" class="fieldInput" placeholder="https://..." />
 
-        <label class="fieldLabel">PDF (opcional)</label>
-        <input id="fPdf" class="fieldInput" type="file" accept="application/pdf" />
-        <div class="statusBar">Si seleccionas PDF, se ignora la URL.</div>
+        <div id="pdfFieldWrap">
+          <label class="fieldLabel">PDF (opcional)</label>
+          <input id="fPdf" class="fieldInput" type="file" accept="application/pdf" />
+          <div class="statusBar">Si seleccionas PDF, se ignora la URL.</div>
+        </div>
 
         <label class="fieldLabel">Categoría</label>
         <input id="fCat" class="fieldInput" placeholder="Ej. Sistemas" />
@@ -67,6 +69,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
